@@ -10,10 +10,6 @@ from kivymd.uix.list import OneLineListItem
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivymd.uix.card import MDCard
 from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.label import MDLabel
-from kivymd.uix.floatlayout import MDFloatLayout
-from kivymd.uix.button import MDIconButton
 
 Window.size = (360, 640)
 
@@ -29,7 +25,7 @@ ScreenManager:
 
         MDBottomNavigationItem:
             name: 'screen1'
-            text: 'Home'
+            text: 'Livros'
             icon: 'home'
 
             MDBoxLayout:
@@ -52,7 +48,7 @@ ScreenManager:
 
         MDBottomNavigationItem:
             name: 'screen2'
-            text: 'Data'
+            text: 'Estatísticas'
             icon: 'chart-bar'
 
             MDBoxLayout:
@@ -63,10 +59,10 @@ ScreenManager:
                 MDLabel:
                     text: 'Insights'
                     halign: 'center'
-        
+
         MDBottomNavigationItem:
             name: 'screen3'
-            text: 'Account'
+            text: 'Perfil'
             icon: 'account'
 
             MDBoxLayout:
@@ -80,7 +76,7 @@ ScreenManager:
 
         MDBottomNavigationItem:
             name: 'screen4'
-            text: 'Settings'
+            text: 'Configurações'
             icon: 'cog'
 
             MDBoxLayout:
@@ -110,62 +106,57 @@ ScreenManager:
 <AddBookScreen>:
     name: 'add_book'
 
-    MDFloatLayout:
+    MDIconButton:
+        icon: "arrow-left"
+        pos_hint: {"center_x": 0.1, "center_y": 0.95}
+        on_release: app.cancel_book()
 
-        MDIconButton:
-            icon: "arrow-left"
-            pos_hint: {"center_x": 0.1, "center_y": 0.95}
-            on_release: app.cancel_book()
+    MDIconButton:
+        icon: "trash-can"
+        pos_hint: {"center_x": 0.9, "center_y": 0.95}
+        on_release: app.delete_book()
 
-        MDIconButton:
-            icon: "trash-can"
-            pos_hint: {"center_x": 0.9, "center_y": 0.95}
-            on_release: app.delete_book()
+    MDBoxLayout:
+        orientation: 'vertical'
+        spacing: "10dp"
+        padding: "20dp"
 
-        MDBoxLayout:
-            orientation: 'vertical'
-            spacing: "10dp"
-            padding: "20dp"
-            pos_hint: {"center_y": 0.5}
+        MDTextField:
+            id: book_name
+            hint_text: "Nome do Livro"
+            pos_hint: {'center_x': 0.5}
 
-            MDTextField:
-                id: book_name
-                hint_text: "Nome do Livro"
-                pos_hint: {'center_x': 0.5}
+        MDTextField:
+            id: book_author
+            hint_text: "Autor"
+            pos_hint: {'center_x': 0.5}
 
-            MDTextField:
-                id: book_author
-                hint_text: "Autor"
-                pos_hint: {'center_x': 0.5}
+        MDTextField:
+            id: book_pages
+            hint_text: "Quantidade de Páginas"
+            pos_hint: {'center_x': 0.5}
+            input_filter: 'int'
 
-            MDTextField:
-                id: book_pages
-                hint_text: "Quantidade de Páginas"
-                pos_hint: {'center_x': 0.5}
-                input_filter: 'int'
+        MDRaisedButton:
+            id: book_status_button
+            text: "Selecione o Status"
+            pos_hint: {'center_x': 0.5}
+            on_release: app.open_status_menu()
 
-            MDRaisedButton:
-                id: book_status_button
-                text: "Selecione o Status"
-                pos_hint: {'center_x': 0.5}
-                on_release: app.open_status_menu()
+        MDRaisedButton:
+            text: 'Salvar'
+            pos_hint: {'center_x': 0.5}
+            on_release: app.save_book()
+    '''
 
-            MDRaisedButton:
-                text: 'Salvar'
-                pos_hint: {'center_x': 0.5}
-                on_release: app.save_book()
-
-            MDRaisedButton:
-                text: 'Cancelar'
-                pos_hint: {'center_x': 0.5}
-                on_release: app.cancel_book()
-'''
 
 class HomeScreen(MDScreen):
     pass
 
+
 class AddBookScreen(MDScreen):
     pass
+
 
 class MainApp(MDApp):
     def build(self):
@@ -200,12 +191,13 @@ class MainApp(MDApp):
         book_pages = self.root.get_screen('add_book').ids.book_pages.text
 
         if book_name and book_author and book_pages and self.selected_status:
-            book_text = f"{book_name} - {book_author} - {book_pages} páginas - {self.selected_status}"
+            book_text = f"{book_name} - {book_author} - {self.selected_status}"
             if self.current_book_index is not None:
                 book = self.root.get_screen('home').ids.book_list.children[self.current_book_index]
                 book.text = book_text
             else:
-                book_item = OneLineListItem(text=book_text, on_release=lambda x: self.show_add_book_screen(self.root.get_screen('home').ids.book_list.children.index(x)))
+                book_item = OneLineListItem(text=book_text, on_release=lambda x: self.show_add_book_screen(
+                    self.root.get_screen('home').ids.book_list.children.index(x)))
                 self.root.get_screen('home').ids.book_list.add_widget(book_item)
 
             self.root.current = 'home'
@@ -236,7 +228,8 @@ class MainApp(MDApp):
             {"text": "Lido", "viewclass": "OneLineListItem", "on_release": lambda x="Lido": self.set_status(x)},
             {"text": "Não Lido", "viewclass": "OneLineListItem", "on_release": lambda x="Não Lido": self.set_status(x)},
             {"text": "Lendo", "viewclass": "OneLineListItem", "on_release": lambda x="Lendo": self.set_status(x)},
-            {"text": "Abandonado", "viewclass": "OneLineListItem", "on_release": lambda x="Abandonado": self.set_status(x)},
+            {"text": "Abandonado", "viewclass": "OneLineListItem",
+             "on_release": lambda x="Abandonado": self.set_status(x)},
         ]
         self.menu = MDDropdownMenu(
             caller=self.root.get_screen('add_book').ids.book_status_button,
@@ -257,6 +250,7 @@ class MainApp(MDApp):
         self.theme_cls.theme_style = (
             "Dark" if self.theme_cls.theme_style == "Light" else "Light"
         )
+
 
 if __name__ == '__main__':
     MainApp().run()
