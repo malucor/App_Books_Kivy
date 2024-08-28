@@ -1,6 +1,6 @@
 from kivy.lang import Builder
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton
+from kivymd.uix.button import MDRaisedButton, MDIconButton
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.bottomnavigation import MDBottomNavigation, MDBottomNavigationItem
@@ -9,7 +9,7 @@ from kivymd.uix.textfield import MDTextField
 from kivymd.uix.list import OneLineListItem
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivymd.uix.card import MDCard
-from kivymd.uix.menu import MDDropdownMenu
+from kivymd.uix.selectioncontrol import MDCheckbox
 
 Window.size = (360, 640)
 
@@ -137,17 +137,60 @@ ScreenManager:
             pos_hint: {'center_x': 0.5}
             input_filter: 'int'
 
-        MDRaisedButton:
-            id: book_status_button
-            text: "Selecione o Status"
-            pos_hint: {'center_x': 0.5}
-            on_release: app.open_status_menu()
+        MDBoxLayout:
+            orientation: 'vertical'
+            spacing: "10dp"
+            padding: "10dp"
+
+            MDLabel:
+                text: "Status:"
+                halign: "left"
+
+            MDBoxLayout:
+                orientation: 'vertical'
+                spacing: "10dp"
+
+                MDCheckbox:
+                    id: status_read
+                    group: 'status'
+                    active: app.selected_status == 'Lido'
+                    halign: "left"
+                MDLabel:
+                    text: "Lido"
+                    halign: "left"
+
+                MDCheckbox:
+                    id: status_unread
+                    group: 'status'
+                    active: app.selected_status == 'Não Lido'
+                    halign: "left"
+                MDLabel:
+                    text: "Não Lido"
+                    halign: "left"
+
+                MDCheckbox:
+                    id: status_reading
+                    group: 'status'
+                    active: app.selected_status == 'Lendo'
+                    halign: "left"
+                MDLabel:
+                    text: "Lendo"
+                    halign: "left"
+
+                MDCheckbox:
+                    id: status_abandoned
+                    group: 'status'
+                    active: app.selected_status == 'Abandonado'
+                    halign: "left"
+                MDLabel:
+                    text: "Abandonado"
+                    halign: "left"
 
         MDRaisedButton:
             text: 'Salvar'
             pos_hint: {'center_x': 0.5}
             on_release: app.save_book()
-    '''
+'''
 
 
 class HomeScreen(MDScreen):
@@ -176,22 +219,39 @@ class MainApp(MDApp):
             self.root.get_screen('add_book').ids.book_author.text = book_data[1]
             self.root.get_screen('add_book').ids.book_pages.text = book_data[2] if len(book_data) > 2 else ""
             self.selected_status = book_data[3] if len(book_data) > 3 else None
-            self.root.get_screen('add_book').ids.book_status_button.text = self.selected_status or "Selecione o Status"
+            self.set_status_in_checkboxes(self.selected_status)
         else:
             self.root.get_screen('add_book').ids.book_name.text = ""
             self.root.get_screen('add_book').ids.book_author.text = ""
             self.root.get_screen('add_book').ids.book_pages.text = ""
             self.selected_status = None
-            self.root.get_screen('add_book').ids.book_status_button.text = "Selecione o Status"
+            self.set_status_in_checkboxes(None)
         self.root.current = 'add_book'
+
+    def set_status_in_checkboxes(self, status):
+        checkboxes = {
+            'Lido': 'status_read',
+            'Não Lido': 'status_unread',
+            'Lendo': 'status_reading',
+            'Abandonado': 'status_abandoned'
+        }
+        for label, checkbox_id in checkboxes.items():
+            self.root.get_screen('add_book').ids[checkbox_id].active = (status == label)
 
     def save_book(self):
         book_name = self.root.get_screen('add_book').ids.book_name.text
         book_author = self.root.get_screen('add_book').ids.book_author.text
         book_pages = self.root.get_screen('add_book').ids.book_pages.text
 
-        if book_name and book_author and book_pages and self.selected_status:
-            book_text = f"{book_name} - {book_author} - {self.selected_status}"
+        # Determine which checkbox is selected
+        status = None
+        for checkbox in ['status_read', 'status_unread', 'status_reading', 'status_abandoned']:
+            if self.root.get_screen('add_book').ids[checkbox].active:
+                status = self.root.get_screen('add_book').ids[checkbox].text
+                break
+
+        if book_name and book_author and book_pages and status:
+            book_text = f"{book_name} - {book_author} - {book_pages} páginas - {status}"
             if self.current_book_index is not None:
                 book = self.root.get_screen('home').ids.book_list.children[self.current_book_index]
                 book.text = book_text
@@ -221,27 +281,7 @@ class MainApp(MDApp):
         self.root.get_screen('add_book').ids.book_author.text = ""
         self.root.get_screen('add_book').ids.book_pages.text = ""
         self.selected_status = None
-        self.root.get_screen('add_book').ids.book_status_button.text = "Selecione o Status"
-
-    def open_status_menu(self):
-        menu_items = [
-            {"text": "Lido", "viewclass": "OneLineListItem", "on_release": lambda x="Lido": self.set_status(x)},
-            {"text": "Não Lido", "viewclass": "OneLineListItem", "on_release": lambda x="Não Lido": self.set_status(x)},
-            {"text": "Lendo", "viewclass": "OneLineListItem", "on_release": lambda x="Lendo": self.set_status(x)},
-            {"text": "Abandonado", "viewclass": "OneLineListItem",
-             "on_release": lambda x="Abandonado": self.set_status(x)},
-        ]
-        self.menu = MDDropdownMenu(
-            caller=self.root.get_screen('add_book').ids.book_status_button,
-            items=menu_items,
-            width_mult=4,
-        )
-        self.menu.open()
-
-    def set_status(self, status):
-        self.selected_status = status
-        self.root.get_screen('add_book').ids.book_status_button.text = status
-        self.menu.dismiss()
+        self.set_status_in_checkboxes(None)
 
     def switch_theme_style(self):
         self.theme_cls.primary_palette = (
