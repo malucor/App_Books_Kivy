@@ -1,3 +1,4 @@
+import pyrebase
 from kivy.lang import Builder
 from kivymd.app import MDApp
 from kivymd.uix.button import MDRaisedButton
@@ -13,10 +14,50 @@ from kivymd.uix.menu import MDDropdownMenu
 
 Window.size = (360, 640)
 
+firebase_config = {
+    "apiKey": "API_KEY",
+    "authDomain": "DOMINIO.firebaseapp.com",
+    "databaseURL": "https://DOMINIO.firebaseio.com/",
+    "projectId": "PROJECT_ID",
+    "storageBucket": "BUCKET.appspot.com",
+    "messagingSenderId": "SENDER_ID",
+    "appId": "APP_ID",
+    "measurementId": "MEASUREMENT_ID"
+}
+
+firebase = pyrebase.initialize_app(firebase_config)
+auth = firebase.auth()
+db = firebase.database()
+
 KV = '''
 ScreenManager:
+    LoginScreen:
     HomeScreen:
     AddBookScreen:
+
+<LoginScreen>:
+    name: 'login'
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 10
+        MDTextField:
+            id: email
+            hint_text: "Email"
+            pos_hint: {'center_x': 0.5}
+        MDTextField:
+            id: password
+            hint_text: "Senha"
+            password: True
+            pos_hint: {'center_x': 0.5}
+        MDRaisedButton:
+            text: "Login"
+            pos_hint: {'center_x': 0.5}
+            on_release: app.login(email.text, password.text)
+        MDRaisedButton:
+            text: "Registrar"
+            pos_hint: {'center_x': 0.5}
+            on_release: app.register(email.text, password.text)
 
 <HomeScreen>:
     name: 'home'
@@ -146,17 +187,17 @@ ScreenManager:
         MDRaisedButton:
             text: 'Salvar'
             pos_hint: {'center_x': 0.5}
-            on_release: app.save_book()
+            on_release: app.save_book(book_name.text, book_author.text, book_pages.text)
     '''
 
+class LoginScreen(MDScreen):
+    pass
 
 class HomeScreen(MDScreen):
     pass
 
-
 class AddBookScreen(MDScreen):
     pass
-
 
 class MainApp(MDApp):
     def build(self):
@@ -166,6 +207,36 @@ class MainApp(MDApp):
         self.current_book_index = None
         self.selected_status = None
         return Builder.load_string(KV)
+
+    def login(self, email, password):
+        try:
+            user = auth.sign_in_with_email_and_password(email, password)
+            token = user['idToken']
+            self.load_books(user['localId'], token)
+            self.root.current = 'home'
+        except Exception as e:
+            print(f"Login falhou: {e}")
+
+
+    def register(self, email, password):
+        try:
+            user = auth.create_user_with_email_and_password(email, password)
+            print("Usuário registrado com sucesso!")
+            self.root.current = 'home'
+        except Exception as e:
+            print(f"Registro falhou: {e}")
+
+    def load_books(self, user_id, token):
+        try:
+            books = db.child("users").child(user_id).child("books").get(token)
+            book_list = self.root.get_screen('home').ids.book_list
+            book_list.clear_widgets()
+            if books.each():
+                for book in books.each():
+                    book_item = OneLineListItem(text=book.val(), on_release=lambda x=book: self.show_add_book_screen(x))
+                    book_list.add_widget(book_item)
+        except Exception as e:
+            print(f"Falha ao carregar livros: {e}")
 
     def show_add_book_screen(self, book_index=None):
         self.current_book_index = book_index
@@ -185,23 +256,19 @@ class MainApp(MDApp):
             self.root.get_screen('add_book').ids.book_status_button.text = "Selecione o Status"
         self.root.current = 'add_book'
 
-    def save_book(self):
-        book_name = self.root.get_screen('add_book').ids.book_name.text
-        book_author = self.root.get_screen('add_book').ids.book_author.text
-        book_pages = self.root.get_screen('add_book').ids.book_pages.text
-
-        if book_name and book_author and book_pages and self.selected_status:
-            book_text = f"{book_name} - {book_author} - {self.selected_status}"
-            if self.current_book_index is not None:
-                book = self.root.get_screen('home').ids.book_list.children[self.current_book_index]
-                book.text = book_text
-            else:
-                book_item = OneLineListItem(text=book_text, on_release=lambda x: self.show_add_book_screen(
-                    self.root.get_screen('home').ids.book_list.children.index(x)))
-                self.root.get_screen('home').ids.book_list.add_widget(book_item)
-
-            self.root.current = 'home'
-            self.current_book_index = None
+    def save_book(self, name, author, pages):
+        user = auth.current_user
+        if user and self.selected_status:
+            try:
+                token = user['idToken']
+                book_data = f"{name} - {author} - {pages} páginas - {self.selected_status}"
+                db.child("users").child(user['localId']).child("books").push(book_data, token=token)
+                self.load_books(user['localId'], token)
+                self.root.current = 'home'
+            except Exception as e:
+                print(f"Erro ao salvar livro: {e}")
+        else:
+            print("Preencha todos os campos")
 
     def cancel_book(self):
         self.clear_add_book_screen()
