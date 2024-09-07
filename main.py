@@ -112,8 +112,24 @@ ScreenManager:
                 padding: "20dp"
 
                 MDLabel:
-                    text: 'Perfil'
+                    id: user_email
+                    text: 'Email:'
                     halign: 'center'
+
+                MDRaisedButton:
+                    text: "Trocar Senha"
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.change_password()
+
+                MDRaisedButton:
+                    text: "Excluir Conta"
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.delete_account()
+
+                MDRaisedButton:
+                    text: "Sair"
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.logout()
 
         MDBottomNavigationItem:
             name: 'screen4'
@@ -213,6 +229,7 @@ class MainApp(MDApp):
             user = auth.sign_in_with_email_and_password(email, password)
             token = user['idToken']
             self.load_books(user['localId'], token)
+            self.root.get_screen('home').ids.user_email.text = f"Email: {user['email']}"
             self.root.current = 'home'
         except Exception as e:
             print(f"Login falhou: {e}")
@@ -237,6 +254,33 @@ class MainApp(MDApp):
                     book_list.add_widget(book_item)
         except Exception as e:
             print(f"Falha ao carregar livros: {e}")
+    
+    def change_password(self):
+        user = auth.current_user
+        if user:
+            email = user['email']
+            try:
+                auth.send_password_reset_email(email)
+                print(f"E-mail de redefinição de senha enviado para {email}")
+            except Exception as e:
+                print(f"Erro ao enviar e-mail de redefinição: {e}")
+    
+    def delete_account(self):
+        user = auth.current_user
+        if user:
+            try:
+                token = user['idToken']
+                auth.delete_user_account(token)
+                db.child("users").child(user['localId']).remove(token=token)
+                print("Conta excluída com sucesso")
+                self.root.current = 'login'
+            except Exception as e:
+                print(f"Erro ao excluir conta: {e}")
+    
+    def logout(self):
+        auth.current_user = None
+        print("Usuário deslogado")
+        self.root.current = 'login'
 
     def show_add_book_screen(self, book_index=None):
         self.current_book_index = book_index
