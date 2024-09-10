@@ -1,3 +1,7 @@
+import pyrebase
+import pandas as pd
+import matplotlib.pyplot as plt
+from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 from kivy.lang import Builder
 from kivymd.app import MDApp
 from kivymd.uix.button import MDRaisedButton
@@ -13,10 +17,56 @@ from kivymd.uix.menu import MDDropdownMenu
 
 Window.size = (360, 640)
 
+firebase_config = {
+    "apiKey": "API_KEY",
+    "authDomain": "DOMINIO.firebaseapp.com",
+    "databaseURL": "https://DOMINIO.firebaseio.com/",
+    "projectId": "PROJECT_ID",
+    "storageBucket": "BUCKET.appspot.com",
+    "messagingSenderId": "SENDER_ID",
+    "appId": "APP_ID",
+    "measurementId": "MEASUREMENT_ID"
+}
+
+firebase = pyrebase.initialize_app(firebase_config)
+auth = firebase.auth()
+db = firebase.database()
+
 KV = '''
 ScreenManager:
+    LoginScreen:
     HomeScreen:
     AddBookScreen:
+
+<LoginScreen>:
+    name: 'login'
+
+    MDBoxLayout:
+
+        orientation: 'vertical'
+        padding: 20
+        spacing: 10
+
+        MDTextField:
+            id: email
+            hint_text: "Email"
+            pos_hint: {'center_x': 0.5}
+
+        MDTextField:
+            id: password
+            hint_text: "Senha"
+            password: True
+            pos_hint: {'center_x': 0.5}
+
+        MDRaisedButton:
+            text: "Login"
+            pos_hint: {'center_x': 0.5}
+            on_release: app.login(email.text, password.text)
+
+        MDRaisedButton:
+            text: "Registrar"
+            pos_hint: {'center_x': 0.5}
+            on_release: app.register(email.text, password.text)
 
 <HomeScreen>:
     name: 'home'
@@ -52,6 +102,7 @@ ScreenManager:
             icon: 'chart-bar'
 
             MDBoxLayout:
+                id: statistics_box
                 orientation: 'vertical'
                 spacing: "10dp"
                 padding: "20dp"
@@ -59,6 +110,11 @@ ScreenManager:
                 MDLabel:
                     text: 'Insights'
                     halign: 'center'
+                
+                MDRaisedButton:
+                    text: 'Atualizar Gráfico'
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.show_statistics()
 
         MDBottomNavigationItem:
             name: 'screen3'
@@ -71,8 +127,24 @@ ScreenManager:
                 padding: "20dp"
 
                 MDLabel:
-                    text: 'Perfil'
+                    id: user_email
+                    text: 'Email:'
                     halign: 'center'
+
+                MDRaisedButton:
+                    text: "Trocar Senha"
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.change_password()
+
+                MDRaisedButton:
+                    text: "Excluir Conta"
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.delete_account()
+
+                MDRaisedButton:
+                    text: "Sair"
+                    pos_hint: {'center_x': 0.5}
+                    on_release: app.logout()
 
         MDBottomNavigationItem:
             name: 'screen4'
@@ -92,14 +164,14 @@ ScreenManager:
                     pos_hint: {"center_x": .5, "center_y": .5}
 
                     MDLabel:
-                        text: "Theme style - {}".format(app.theme_cls.theme_style)
+                        text: "Tema - {}".format(app.theme_cls.theme_style)
                         halign: "center"
                         valign: "center"
                         bold: True
                         font_style: "H6"
 
                     MDRaisedButton:
-                        text: "Set theme"
+                        text: "Mudar Tema"
                         on_release: app.switch_theme_style()
                         pos_hint: {"center_x": .5}
 
@@ -146,17 +218,17 @@ ScreenManager:
         MDRaisedButton:
             text: 'Salvar'
             pos_hint: {'center_x': 0.5}
-            on_release: app.save_book()
+            on_release: app.save_book(book_name.text, book_author.text, book_pages.text)
     '''
 
+class LoginScreen(MDScreen):
+    pass
 
 class HomeScreen(MDScreen):
     pass
 
-
 class AddBookScreen(MDScreen):
     pass
-
 
 class MainApp(MDApp):
     def build(self):
@@ -166,6 +238,63 @@ class MainApp(MDApp):
         self.current_book_index = None
         self.selected_status = None
         return Builder.load_string(KV)
+    
+    def login(self, email, password):
+        try:
+            user = auth.sign_in_with_email_and_password(email, password)
+            token = user['idToken']
+            self.load_books(user['localId'], token)
+            self.root.get_screen('home').ids.user_email.text = f"Email: {user['email']}"
+            self.root.current = 'home'
+        except Exception as e:
+            print(f"Login falhou: {e}")
+
+    def register(self, email, password):
+        try:
+            user = auth.create_user_with_email_and_password(email, password)
+            print("Usuário registrado com sucesso!")
+            self.root.current = 'home'
+        except Exception as e:
+            print(f"Registro falhou: {e}")
+
+    def load_books(self, user_id, token):
+        try:
+            books = db.child("users").child(user_id).child("books").get(token)
+            book_list = self.root.get_screen('home').ids.book_list
+            book_list.clear_widgets()
+            if books.each():
+                for book in books.each():
+                    book_item = OneLineListItem(text=book.val(), on_release=lambda x=book: self.show_add_book_screen(x))
+                    book_list.add_widget(book_item)
+        except Exception as e:
+            print(f"Falha ao carregar livros: {e}")
+    
+    def change_password(self):
+        user = auth.current_user
+        if user:
+            email = user['email']
+            try:
+                auth.send_password_reset_email(email)
+                print(f"E-mail de redefinição de senha enviado para {email}")
+            except Exception as e:
+                print(f"Erro ao enviar e-mail de redefinição: {e}")
+    
+    def delete_account(self):
+        user = auth.current_user
+        if user:
+            try:
+                token = user['idToken']
+                auth.delete_user_account(token)
+                db.child("users").child(user['localId']).remove(token=token)
+                print("Conta excluída com sucesso")
+                self.root.current = 'login'
+            except Exception as e:
+                print(f"Erro ao excluir conta: {e}")
+    
+    def logout(self):
+        auth.current_user = None
+        print("Usuário deslogado")
+        self.root.current = 'login'
 
     def show_add_book_screen(self, book_index=None):
         self.current_book_index = book_index
@@ -185,23 +314,19 @@ class MainApp(MDApp):
             self.root.get_screen('add_book').ids.book_status_button.text = "Selecione o Status"
         self.root.current = 'add_book'
 
-    def save_book(self):
-        book_name = self.root.get_screen('add_book').ids.book_name.text
-        book_author = self.root.get_screen('add_book').ids.book_author.text
-        book_pages = self.root.get_screen('add_book').ids.book_pages.text
-
-        if book_name and book_author and book_pages and self.selected_status:
-            book_text = f"{book_name} - {book_author} - {self.selected_status}"
-            if self.current_book_index is not None:
-                book = self.root.get_screen('home').ids.book_list.children[self.current_book_index]
-                book.text = book_text
-            else:
-                book_item = OneLineListItem(text=book_text, on_release=lambda x: self.show_add_book_screen(
-                    self.root.get_screen('home').ids.book_list.children.index(x)))
-                self.root.get_screen('home').ids.book_list.add_widget(book_item)
-
-            self.root.current = 'home'
-            self.current_book_index = None
+    def save_book(self, name, author, pages):
+        user = auth.current_user
+        if user and self.selected_status:
+            try:
+                token = user['idToken']
+                book_data = f"{name} - {author} - {pages} páginas - {self.selected_status}"
+                db.child("users").child(user['localId']).child("books").push(book_data, token=token)
+                self.load_books(user['localId'], token)
+                self.root.current = 'home'
+            except Exception as e:
+                print(f"Erro ao salvar livro: {e}")
+        else:
+            print("Preencha todos os campos")
 
     def cancel_book(self):
         self.clear_add_book_screen()
@@ -242,6 +367,33 @@ class MainApp(MDApp):
         self.selected_status = status
         self.root.get_screen('add_book').ids.book_status_button.text = status
         self.menu.dismiss()
+    
+    def create_pie_chart(self):
+        user = auth.current_user
+        if user:
+            try:
+                token = user['idToken']
+                books = db.child("users").child(user['localId']).child("books").get(token)
+                status_list = []
+                if books.each():
+                    for book in books.each():
+                        status = book.val().split(" - ")[3]
+                        status_list.append(status)
+                status_df = pd.DataFrame(status_list, columns=['SITUAÇÃO'])
+                contagem = status_df['SITUAÇÃO'].value_counts()
+                plt.figure()
+                plt.pie(contagem, autopct='%1.1f%%')
+                plt.axis('equal')
+                legenda = ['{}: {}'.format(situacao, valor) for situacao, valor in zip(contagem.index, contagem.values)]
+                plt.legend(legenda, loc='center left', bbox_to_anchor=(0, 0))
+                return FigureCanvasKivyAgg(plt.gcf())
+            except Exception as e:
+                print(f"Erro ao criar gráfico: {e}")
+
+    def show_statistics(self):
+        pie_chart = self.create_pie_chart()
+        statistics_screen = self.root.get_screen('home').ids.statistics_box
+        statistics_screen.add_widget(pie_chart)
 
     def switch_theme_style(self):
         self.theme_cls.primary_palette = (
@@ -250,7 +402,6 @@ class MainApp(MDApp):
         self.theme_cls.theme_style = (
             "Dark" if self.theme_cls.theme_style == "Light" else "Light"
         )
-
 
 if __name__ == '__main__':
     MainApp().run()
