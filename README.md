@@ -26,3 +26,5 @@ No ambiente do códido, instale a biblioteca `pyrebase` através do comenado `pi
 - Pyrebase (`pip install pyrebase4`)
 - Kivy (`pip install kivy`)
 - KivyMD (`pip install kivymd`)
+- Pandas (`pip install pandas`)
+- Matplotlib (`pip install matplotlib`)
