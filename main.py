@@ -5,6 +5,7 @@ from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 from kivy.lang import Builder
 from kivymd.app import MDApp
 from kivymd.uix.button import MDRaisedButton
+from kivymd.uix.dialog import MDDialog
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.bottomnavigation import MDBottomNavigation, MDBottomNavigationItem
@@ -86,6 +87,18 @@ ScreenManager:
                 MDLabel:
                     text: 'Livros Cadastrados'
                     halign: 'center'
+                
+                MDTextField:
+                    id: search_field
+                    hint_text: "Pesquisar livro"
+                    icon_right: "magnify"
+                    size_hint_y: None
+                    height: dp(48)
+                    on_text: app.search_books(self.text)
+
+                ScrollView:
+                    MDList:
+                        id: book_list
 
                 ScrollView:
                     MDList:
@@ -247,7 +260,7 @@ class MainApp(MDApp):
             self.root.get_screen('home').ids.user_email.text = f"Email: {user['email']}"
             self.root.current = 'home'
         except Exception as e:
-            print(f"Login falhou: {e}")
+            self.show_error_dialog(f"Login falhou: {e}")
 
     def register(self, email, password):
         try:
@@ -255,7 +268,26 @@ class MainApp(MDApp):
             print("Usuário registrado com sucesso!")
             self.root.current = 'home'
         except Exception as e:
-            print(f"Registro falhou: {e}")
+            self.show_error_dialog(f"Registro falhou: {e}")
+    
+    def show_error_dialog(self, message):
+        if not hasattr(self, 'error_dialog') or not self.error_dialog:
+            self.error_dialog = MDDialog(
+                title="Erro",
+                text=message,
+                size_hint=(0.8, 0.4),
+                buttons=[
+                    MDRaisedButton(
+                        text="OK",
+                        on_release=self.close_error_dialog
+                    )
+                ]
+            )
+        self.error_dialog.text = message
+        self.error_dialog.open()
+
+    def close_error_dialog(self, instance):
+        self.error_dialog.dismiss()
 
     def load_books(self, user_id, token):
         try:
@@ -263,12 +295,12 @@ class MainApp(MDApp):
             book_list = self.root.get_screen('home').ids.book_list
             book_list.clear_widgets()
             if books.each():
-                for book in books.each():
-                    book_item = OneLineListItem(text=book.val(), on_release=lambda x=book: self.show_add_book_screen(x))
+                for index, book in enumerate(books.each()):
+                    book_item = OneLineListItem(text=book.val(), on_release=lambda x=index: self.show_add_book_screen(x))
                     book_list.add_widget(book_item)
         except Exception as e:
             print(f"Falha ao carregar livros: {e}")
-    
+
     def change_password(self):
         user = auth.current_user
         if user:
@@ -299,13 +331,20 @@ class MainApp(MDApp):
     def show_add_book_screen(self, book_index=None):
         self.current_book_index = book_index
         if book_index is not None:
-            book = self.root.get_screen('home').ids.book_list.children[book_index]
-            book_data = book.text.split(" - ")
-            self.root.get_screen('add_book').ids.book_name.text = book_data[0]
-            self.root.get_screen('add_book').ids.book_author.text = book_data[1]
-            self.root.get_screen('add_book').ids.book_pages.text = book_data[2] if len(book_data) > 2 else ""
-            self.selected_status = book_data[3] if len(book_data) > 3 else None
-            self.root.get_screen('add_book').ids.book_status_button.text = self.selected_status or "Selecione o Status"
+            if isinstance(book_index, int):
+                book_list = self.root.get_screen('home').ids.book_list.children
+                if 0 <= book_index < len(book_list):
+                    book = book_list[len(book_list) - 1 - book_index]
+                    book_data = book.text.split(" - ")
+                    self.root.get_screen('add_book').ids.book_name.text = book_data[0]
+                    self.root.get_screen('add_book').ids.book_author.text = book_data[1]
+                    self.root.get_screen('add_book').ids.book_pages.text = book_data[2] if len(book_data) > 2 else ""
+                    self.selected_status = book_data[3] if len(book_data) > 3 else None
+                    self.root.get_screen('add_book').ids.book_status_button.text = self.selected_status or "Selecione o Status"
+                else:
+                    print(f"Índice {book_index} está fora do intervalo.")
+            else:
+                print(f"book_index não é um inteiro válido: {book_index}")
         else:
             self.root.get_screen('add_book').ids.book_name.text = ""
             self.root.get_screen('add_book').ids.book_author.text = ""
@@ -367,6 +406,19 @@ class MainApp(MDApp):
         self.selected_status = status
         self.root.get_screen('add_book').ids.book_status_button.text = status
         self.menu.dismiss()
+    
+    def search_books(self, search_text):
+        book_list = self.root.get_screen('home').ids.book_list
+        all_books = book_list.children[:]
+        book_list.clear_widgets()
+        if search_text == "":
+            for book in reversed(all_books):
+                book_list.add_widget(book)
+        else:
+            search_text = search_text.lower()
+            for book in reversed(all_books):
+                if search_text in book.text.lower():
+                    book_list.add_widget(book)
     
     def create_pie_chart(self):
         user = auth.current_user
